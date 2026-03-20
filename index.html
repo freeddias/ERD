@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ERD Builder</title>
+    <meta
+      name="description"
+      content="Sistema de ERD responsivo para criar entidades, campos e relacionamentos visualmente."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <div>
+            <h1>Diagramador</h1>
+            <p class="subtitle">Modele seu banco visualmente.</p>
+          </div>
+          <button id="theme-toggle" class="btn btn-small theme-toggle" type="button">
+            Tema: Escuro
+          </button>
+        </div>
+
+        <button id="add-entity" class="btn btn-primary">+ Nova Entidade</button>
+
+        <div class="panel">
+          <h2>Relacionamento</h2>
+          <p class="hint">
+            Selecione uma entidade de origem e outra de destino para criar o vínculo.
+          </p>
+
+          <label for="from-entity">Origem</label>
+          <select id="from-entity"></select>
+
+          <label for="to-entity">Destino</label>
+          <select id="to-entity"></select>
+
+          <label for="from-field">Campo origem (FK)</label>
+          <select id="from-field"></select>
+
+          <label for="to-field">Campo destino (referência)</label>
+          <select id="to-field"></select>
+
+          <label for="fk-name">Nome da FK (opcional)</label>
+          <input id="fk-name" type="text" placeholder="fk_pedidos_clientes" />
+
+          <label for="rel-type">Cardinalidade</label>
+          <select id="rel-type">
+            <option value="1:1">1:1</option>
+            <option value="1:N" selected>1:N</option>
+            <option value="N:N">N:N</option>
+          </select>
+
+          <button id="add-relation" class="btn">Criar relacionamento</button>
+        </div>
+
+        <div class="panel">
+          <h2>Relacionamentos criados</h2>
+          <p class="hint">Clique em excluir para remover vínculo e FK.</p>
+          <div id="relations-list" class="relations-list"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Exportar</h2>
+          <button id="export-json" class="btn">Copiar JSON</button>
+        </div>
+      </aside>
+
+      <main class="workspace-wrap">
+        <div class="workspace-toolbar">
+          <span id="status">Arraste as entidades para organizar o diagrama.</span>
+        </div>
+        <section id="workspace" class="workspace" aria-label="Área do diagrama">
+          <svg id="relations-layer" class="relations-layer"></svg>
+        </section>
+      </main>
+    </div>
+
+    <template id="entity-template">
+      <article class="entity-card">
+        <header class="entity-header">
+          <input class="entity-name" value="nova_tabela" />
+          <button class="icon-btn remove-entity" title="Excluir entidade">x</button>
+        </header>
+        <div class="fields"></div>
+        <div class="entity-actions">
+          <button class="btn btn-small add-field">+ Campo</button>
+        </div>
+      </article>
+    </template>
+
+    <template id="field-template">
+      <div class="field-row">
+        <input class="field-name" value="novo_campo" />
+        <select class="field-type">
+          <option>INT</option>
+          <option>VARCHAR</option>
+          <option>TEXT</option>
+          <option>DATE</option>
+          <option>BOOLEAN</option>
+          <option>DECIMAL</option>
+        </select>
+        <div class="field-meta">
+          <label class="flag"><input type="checkbox" class="field-pk" /> PK</label>
+          <span class="fk-chip" hidden>FK</span>
+        </div>
+        <button class="icon-btn remove-field-fk" title="Remover FK do campo" hidden>
+          fk
+        </button>
+        <button class="icon-btn remove-field" title="Remover campo">x</button>
+      </div>
+    </template>
+
+    <script src="script.js"></script>
+  </body>
+</html>
