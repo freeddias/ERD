@@ -1,4 +1,4 @@
-﻿const STORAGE_KEY = "erd-builder-state";
+const STORAGE_KEY = "erd-builder-state";
 
 const state = {
   entities: [],
@@ -119,6 +119,17 @@ document.getElementById("export-json").addEventListener("click", async () => {
   } catch {
     setStatus("Não foi possível copiar automaticamente. Use Ctrl+C manualmente.");
     window.prompt("Copie o JSON:", payload);
+  }
+});
+
+document.getElementById("export-sql").addEventListener("click", async () => {
+  const sql = generateSqlDdl();
+  try {
+    await navigator.clipboard.writeText(sql);
+    setStatus("SQL (DDL) copiado para a área de transferência.");
+  } catch {
+    setStatus("Não foi possível copiar automaticamente. Use Ctrl+C manualmente.");
+    window.prompt("Copie o SQL:", sql);
   }
 });
 
@@ -694,6 +705,140 @@ function escapeHtml(text) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function sqlQuoteIdent(name) {
+  const clean = String(name).trim();
+  if (!clean) {
+    return `"campo"`;
+  }
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(clean)) {
+    return clean;
+  }
+  return `"${clean.replace(/"/g, '""')}"`;
+}
+
+function mapSqlFieldType(fieldType) {
+  const t = String(fieldType || "").trim().toUpperCase();
+  switch (t) {
+    case "INT":
+      return "INT";
+    case "VARCHAR":
+      return "VARCHAR(255)";
+    case "TEXT":
+      return "TEXT";
+    case "DATE":
+      return "DATE";
+    case "BOOLEAN":
+      return "BOOLEAN";
+    case "DECIMAL":
+      return "DECIMAL(10,2)";
+    default:
+      return "VARCHAR(255)";
+  }
+}
+
+function generateSqlDdl() {
+  const lines = [];
+  if (state.entities.length === 0) {
+    lines.push("-- Nenhuma tabela para exportar.");
+    return lines.join("\n");
+  }
+
+  for (const entity of state.entities) {
+    const table = sqlQuoteIdent(entity.name);
+    const fields = Array.isArray(entity.fields) ? entity.fields : [];
+    const pkFields = fields.filter((f) => f.pk);
+    const colDefs = [];
+
+    for (const field of fields) {
+      const col = sqlQuoteIdent(field.name);
+      const typ = mapSqlFieldType(field.type);
+      let def = `  ${col} ${typ}`;
+
+      if (pkFields.length === 1 && field.pk) {
+        def += " NOT NULL PRIMARY KEY";
+      } else if (field.pk) {
+        def += " NOT NULL";
+      }
+
+      colDefs.push(def);
+    }
+
+    if (pkFields.length > 1) {
+      const pkCols = pkFields.map((f) => sqlQuoteIdent(f.name)).join(", ");
+      colDefs.push(`  PRIMARY KEY (${pkCols})`);
+    }
+
+    lines.push(`CREATE TABLE ${table} (`);
+    lines.push(colDefs.join(",\n"));
+    lines.push(");");
+    lines.push("");
+  }
+
+  const usedConstraintNames = new Set();
+
+  function uniqueConstraintName(base) {
+    const raw = String(base || "fk")
+      .trim()
+      .replace(/[^a-zA-Z0-9_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+    const sanitized = raw.slice(0, 56) || "fk";
+    let name = sanitized;
+    let i = 2;
+    while (usedConstraintNames.has(name)) {
+      name = `${sanitized}_${i++}`;
+    }
+    usedConstraintNames.add(name);
+    return name;
+  }
+
+  for (const rel of state.relations) {
+    const fromEnt = getEntityById(rel.fromId);
+    const toEnt = getEntityById(rel.toId);
+    if (!fromEnt || !toEnt) {
+      continue;
+    }
+
+    const fromField = fromEnt.fields.find((f) => f.id === rel.fromFieldId);
+    const toField = toEnt.fields.find((f) => f.id === rel.toFieldId);
+    if (!fromField || !toField) {
+      continue;
+    }
+
+    const fromTable = sqlQuoteIdent(fromEnt.name);
+    const toTable = sqlQuoteIdent(toEnt.name);
+    const fromCol = sqlQuoteIdent(fromField.name);
+    const toCol = sqlQuoteIdent(toField.name);
+
+    let baseName = (rel.fkName || "").trim();
+    if (!baseName) {
+      baseName = `fk_${fromEnt.name}_${fromField.name}_${toEnt.name}`;
+    }
+    const fkCname = uniqueConstraintName(baseName);
+
+    if (rel.type === "N:N") {
+      lines.push(
+        `-- N:N (${fromEnt.name}.${fromField.name} -> ${toEnt.name}.${toField.name}): em muitos modelos é necessária uma tabela de junção; a FK abaixo reflete o vínculo configurado.`
+      );
+    }
+
+    if (rel.type === "1:1") {
+      const uqBase = `uq_${fromEnt.name}_${fromField.name}`;
+      const uqCname = uniqueConstraintName(uqBase);
+      lines.push(
+        `ALTER TABLE ${fromTable} ADD CONSTRAINT ${sqlQuoteIdent(uqCname)} UNIQUE (${fromCol});`
+      );
+    }
+
+    lines.push(
+      `ALTER TABLE ${fromTable} ADD CONSTRAINT ${sqlQuoteIdent(fkCname)} FOREIGN KEY (${fromCol}) REFERENCES ${toTable} (${toCol});`
+    );
+    lines.push("");
+  }
+
+  return lines.join("\n");
 }
 
 const restored = restoreAppState();
