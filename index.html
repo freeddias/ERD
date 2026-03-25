@@ -23,59 +23,127 @@
           </button>
         </div>
 
-        <button id="add-entity" class="btn btn-primary">+ Nova Entidade</button>
-
-        <div class="panel">
-          <h2>Relacionamento</h2>
-          <p class="hint">
-            Selecione uma entidade de origem e outra de destino para criar o vínculo.
-          </p>
-
-          <label for="from-entity">Origem</label>
-          <select id="from-entity"></select>
-
-          <label for="to-entity">Destino</label>
-          <select id="to-entity"></select>
-
-          <label for="from-field">Campo origem (FK)</label>
-          <select id="from-field"></select>
-
-          <label for="to-field">Campo destino (referência)</label>
-          <select id="to-field"></select>
-
-          <label for="fk-name">Nome da FK (opcional)</label>
-          <input id="fk-name" type="text" placeholder="fk_pedidos_clientes" />
-
-          <label for="rel-type">Cardinalidade</label>
-          <select id="rel-type">
-            <option value="1:1">1:1</option>
-            <option value="1:N" selected>1:N</option>
-            <option value="N:N">N:N</option>
-          </select>
-
-          <button id="add-relation" class="btn">Criar relacionamento</button>
+        <div class="screen-switch">
+          <button id="open-erd-screen" class="btn btn-small active" type="button">Tela ERD</button>
+          <button id="open-query-screen" class="btn btn-small" type="button">Tela Query</button>
         </div>
 
-        <div class="panel">
-          <h2>Relacionamentos criados</h2>
-          <p class="hint">Clique em excluir para remover vínculo e FK.</p>
-          <div id="relations-list" class="relations-list"></div>
+        <div id="erd-controls">
+          <button id="add-entity" class="btn btn-primary">+ Nova Entidade</button>
+
+          <div class="panel">
+            <h2>Relacionamento</h2>
+            <p class="hint">
+              Selecione uma entidade de origem e outra de destino para criar o vínculo.
+            </p>
+
+            <label for="from-entity">Origem</label>
+            <select id="from-entity"></select>
+
+            <label for="to-entity">Destino</label>
+            <select id="to-entity"></select>
+
+            <label for="from-field">Campo origem (FK)</label>
+            <select id="from-field"></select>
+
+            <label for="to-field">Campo destino (referência)</label>
+            <select id="to-field"></select>
+
+            <label for="fk-name">Nome da FK (opcional)</label>
+            <input id="fk-name" type="text" placeholder="fk_pedidos_clientes" />
+
+            <label for="rel-type">Cardinalidade</label>
+            <select id="rel-type">
+              <option value="1:1">1:1</option>
+              <option value="1:N" selected>1:N</option>
+              <option value="N:N">N:N</option>
+            </select>
+
+            <button id="add-relation" class="btn">Criar relacionamento</button>
+          </div>
+
+          <div class="panel">
+            <h2>Relacionamentos criados</h2>
+            <p class="hint">Clique em excluir para remover vínculo e FK.</p>
+            <div id="relations-list" class="relations-list"></div>
+          </div>
+
+          <div class="panel">
+            <h2>Exportar</h2>
+            <button id="export-json" class="btn">Copiar JSON</button>
+            <button id="export-sql" class="btn" type="button">Copiar SQL</button>
+          </div>
         </div>
 
-        <div class="panel">
-          <h2>Exportar</h2>
-          <button id="export-json" class="btn">Copiar JSON</button>
-          <button id="export-sql" class="btn" type="button">Copiar SQL</button>
+        <div id="query-controls" hidden>
+          <div class="panel">
+            <h2>Gerador de Query</h2>
+            <p class="hint">
+              Escolha tabela, tipo de query e campos para montar SQL automaticamente.
+            </p>
+
+            <label for="query-entity">Tabela</label>
+            <select id="query-entity"></select>
+
+            <label for="query-type">Tipo</label>
+            <select id="query-type">
+              <option value="insert">INSERT</option>
+              <option value="update">UPDATE</option>
+              <option value="delete">DELETE</option>
+              <option value="select">SELECT</option>
+            </select>
+
+            <label for="query-language">Exportar para</label>
+            <select id="query-language">
+              <option value="sql">SQL</option>
+              <option value="js">JavaScript</option>
+              <option value="java">Java</option>
+            </select>
+
+            <div class="panel">
+              <h2>Campos para INSERT/UPDATE/SELECT</h2>
+              <p class="hint">Marque os campos que entram na operação.</p>
+              <div id="query-fields" class="query-checklist"></div>
+            </div>
+  
+            <div class="panel">
+              <h2>Campos de filtro (WHERE)</h2>
+              <p class="hint">Marque os campos usados nas condições.</p>
+              <div id="query-where-fields" class="query-checklist"></div>
+            </div>
+  
+            <div class="panel">
+              <h2>Saída</h2>
+              <textarea id="query-output" class="query-output" readonly></textarea>
+            </div>
+            <button id="generate-query" class="btn">Gerar query</button>
+            <button id="copy-query" class="btn" type="button">Copiar query</button>
+          </div>
+
         </div>
       </aside>
 
-      <main class="workspace-wrap">
+      <main id="erd-screen" class="workspace-wrap">
         <div class="workspace-toolbar">
           <span id="status">Arraste as entidades para organizar o diagrama.</span>
         </div>
         <section id="workspace" class="workspace" aria-label="Área do diagrama">
           <svg id="relations-layer" class="relations-layer"></svg>
         </section>
+      </main>
+
+      <main id="query-screen" class="query-wrap" hidden>
+        <!-- <div class="query-toolbar">
+          <span>Use o menu esquerdo para selecionar opções e gerar a query.</span>
+        </div> -->
+        <!-- <section class="query-result-area" aria-label="Área de geração de query">
+          <article class="panel query-result-panel">
+            <h2>Gerador de Query</h2>
+            <p class="hint">
+              Todas as configurações e a saída estão no painel esquerdo.
+            </p>
+          </article>
+        </section> -->
       </main>
     </div>
 
