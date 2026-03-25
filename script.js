@@ -18,8 +18,21 @@ const relTypeSelect = document.getElementById("rel-type");
 const fkNameInput = document.getElementById("fk-name");
 const statusEl = document.getElementById("status");
 const themeToggleButton = document.getElementById("theme-toggle");
+const openErdScreenBtn = document.getElementById("open-erd-screen");
+const openQueryScreenBtn = document.getElementById("open-query-screen");
+const erdScreen = document.getElementById("erd-screen");
+const queryScreen = document.getElementById("query-screen");
+const erdControls = document.getElementById("erd-controls");
+const queryControls = document.getElementById("query-controls");
+const queryEntitySelect = document.getElementById("query-entity");
+const queryTypeSelect = document.getElementById("query-type");
+const queryLanguageSelect = document.getElementById("query-language");
+const queryFieldsWrap = document.getElementById("query-fields");
+const queryWhereFieldsWrap = document.getElementById("query-where-fields");
+const queryOutput = document.getElementById("query-output");
 
 let drag = null;
+let activeScreen = "erd";
 
 document.getElementById("add-entity").addEventListener("click", () => {
   createEntity();
@@ -34,6 +47,9 @@ window.addEventListener("resize", () => {
 });
 
 themeToggleButton.addEventListener("click", toggleTheme);
+openErdScreenBtn.addEventListener("click", () => setActiveScreen("erd"));
+openQueryScreenBtn.addEventListener("click", () => setActiveScreen("query"));
+queryEntitySelect.addEventListener("change", renderQueryFieldSelectors);
 
 workspace.addEventListener("dblclick", (event) => {
   if (event.target.closest(".entity-card") || event.target.closest(".relation-hit")) {
@@ -130,6 +146,34 @@ document.getElementById("export-sql").addEventListener("click", async () => {
   } catch {
     setStatus("Não foi possível copiar automaticamente. Use Ctrl+C manualmente.");
     window.prompt("Copie o SQL:", sql);
+  }
+});
+
+document.getElementById("generate-query").addEventListener("click", () => {
+  const sql = generateCrudSql();
+  if (!sql) {
+    queryOutput.value = "-- Defina uma tabela e os campos para gerar.";
+    setStatus("Selecione tabela e campos para gerar a query.");
+    return;
+  }
+
+  queryOutput.value = formatExportQuery(sql, queryLanguageSelect.value);
+  setStatus("Query gerada com sucesso.");
+});
+
+document.getElementById("copy-query").addEventListener("click", async () => {
+  const raw = queryOutput.value.trim();
+  if (!raw) {
+    setStatus("Gere uma query antes de copiar.");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(raw);
+    setStatus("Query copiada para a área de transferência.");
+  } catch {
+    setStatus("Não foi possível copiar automaticamente. Use Ctrl+C manualmente.");
+    window.prompt("Copie a query:", raw);
   }
 });
 
@@ -334,6 +378,7 @@ function renderField(entity, wrap, field) {
 function updateEntitySelectors() {
   const prevFrom = fromEntitySelect.value;
   const prevTo = toEntitySelect.value;
+  const prevQueryEntity = queryEntitySelect.value;
 
   const options = state.entities
     .map((entity) => `<option value="${entity.id}">${escapeHtml(entity.name)}</option>`)
@@ -341,6 +386,7 @@ function updateEntitySelectors() {
 
   fromEntitySelect.innerHTML = options;
   toEntitySelect.innerHTML = options;
+  queryEntitySelect.innerHTML = options || "<option value=''>Sem tabelas</option>";
 
   if (prevFrom && state.entities.some((entity) => entity.id === prevFrom)) {
     fromEntitySelect.value = prevFrom;
@@ -350,7 +396,12 @@ function updateEntitySelectors() {
     toEntitySelect.value = prevTo;
   }
 
+  if (prevQueryEntity && state.entities.some((entity) => entity.id === prevQueryEntity)) {
+    queryEntitySelect.value = prevQueryEntity;
+  }
+
   updateFieldSelectors();
+  renderQueryFieldSelectors();
 }
 
 function updateFieldSelectors() {
@@ -841,15 +892,159 @@ function generateSqlDdl() {
   return lines.join("\n");
 }
 
+function setActiveScreen(screen) {
+  activeScreen = screen === "query" ? "query" : "erd";
+  const isQuery = activeScreen === "query";
+
+  erdScreen.hidden = isQuery;
+  queryScreen.hidden = !isQuery;
+  erdControls.hidden = isQuery;
+  queryControls.hidden = !isQuery;
+
+  openErdScreenBtn.classList.toggle("active", !isQuery);
+  openQueryScreenBtn.classList.toggle("active", isQuery);
+
+  if (isQuery) {
+    renderQueryFieldSelectors();
+    setStatus("Tela Query ativa: selecione os campos e gere seu SQL.");
+  } else {
+    setStatus("Tela ERD ativa: organize entidades e relacionamentos.");
+  }
+}
+
+function renderQueryFieldSelectors() {
+  const entity = getEntityById(queryEntitySelect.value);
+  const fields = entity?.fields || [];
+
+  if (fields.length === 0) {
+    queryFieldsWrap.innerHTML = "<p class='hint'>Sem campos disponíveis.</p>";
+    queryWhereFieldsWrap.innerHTML = "<p class='hint'>Sem campos disponíveis.</p>";
+    return;
+  }
+
+  queryFieldsWrap.innerHTML = fields
+    .map(
+      (field) => `
+      <label class="query-check">
+        <input type="checkbox" data-role="data-field" value="${field.id}" />
+        <span>${escapeHtml(field.name)} (${escapeHtml(field.type)})</span>
+      </label>
+    `
+    )
+    .join("");
+
+  queryWhereFieldsWrap.innerHTML = fields
+    .map(
+      (field) => `
+      <label class="query-check">
+        <input type="checkbox" data-role="where-field" value="${field.id}" />
+        <span>${escapeHtml(field.name)} (${escapeHtml(field.type)})</span>
+      </label>
+    `
+    )
+    .join("");
+}
+
+function getCheckedFieldIds(container, role) {
+  return Array.from(container.querySelectorAll(`input[data-role="${role}"]:checked`)).map(
+    (input) => input.value
+  );
+}
+
+function resolveFieldsByIds(entity, fieldIds) {
+  if (!entity) {
+    return [];
+  }
+
+  const byId = new Map(entity.fields.map((field) => [field.id, field]));
+  return fieldIds.map((id) => byId.get(id)).filter(Boolean);
+}
+
+function generateCrudSql() {
+  const entity = getEntityById(queryEntitySelect.value);
+  if (!entity) {
+    return "";
+  }
+
+  const table = sqlQuoteIdent(entity.name);
+  const op = queryTypeSelect.value;
+  const dataFieldIds = getCheckedFieldIds(queryFieldsWrap, "data-field");
+  const whereFieldIds = getCheckedFieldIds(queryWhereFieldsWrap, "where-field");
+  const dataFields = resolveFieldsByIds(entity, dataFieldIds);
+  const whereFields = resolveFieldsByIds(entity, whereFieldIds);
+
+  if (op === "insert") {
+    if (dataFields.length === 0) {
+      return "";
+    }
+
+    const cols = dataFields.map((field) => sqlQuoteIdent(field.name)).join(", ");
+    const params = dataFields.map(() => "?").join(", ");
+    return `INSERT INTO ${table} (${cols}) VALUES (${params});`;
+  }
+
+  if (op === "update") {
+    if (dataFields.length === 0 || whereFields.length === 0) {
+      return "";
+    }
+    const setPart = dataFields.map((field) => `${sqlQuoteIdent(field.name)} = ?`).join(", ");
+    const wherePart = whereFields
+      .map((field) => `${sqlQuoteIdent(field.name)} = ?`)
+      .join(" AND ");
+    return `UPDATE ${table} SET ${setPart} WHERE ${wherePart};`;
+  }
+
+  if (op === "delete") {
+    if (whereFields.length === 0) {
+      return "";
+    }
+    const wherePart = whereFields
+      .map((field) => `${sqlQuoteIdent(field.name)} = ?`)
+      .join(" AND ");
+    return `DELETE FROM ${table} WHERE ${wherePart};`;
+  }
+
+  if (op === "select") {
+    const cols =
+      dataFields.length > 0
+        ? dataFields.map((field) => sqlQuoteIdent(field.name)).join(", ")
+        : "*";
+    const wherePart =
+      whereFields.length > 0
+        ? ` WHERE ${whereFields.map((field) => `${sqlQuoteIdent(field.name)} = ?`).join(" AND ")}`
+        : "";
+    return `SELECT ${cols} FROM ${table}${wherePart};`;
+  }
+
+  return "";
+}
+
+function formatExportQuery(sql, language) {
+  if (language === "js") {
+    const content = sql.replace(/`/g, "\\`");
+    return `const query = \`${content}\`;\n// db.query(query, [param1, param2]);`;
+  }
+
+  if (language === "java") {
+    const content = sql.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return `String sql = "${content}";\nPreparedStatement stmt = connection.prepareStatement(sql);\n// stmt.setObject(1, valor1);`;
+  }
+
+  return sql;
+}
+
 const restored = restoreAppState();
 if (!restored) {
   initTheme();
   updateEntitySelectors();
   drawRelations();
+  setActiveScreen("erd");
   setStatus("Sem tabelas iniciais. Dê 2 cliques no espaço em branco para criar uma tabela.");
   persistAppState();
 } else if (state.entities.length === 0) {
+  setActiveScreen("erd");
   setStatus("Projeto carregado sem tabelas. Dê 2 cliques no espaço em branco para criar.");
 } else {
+  setActiveScreen("erd");
   setStatus("Projeto carregado do localStorage.");
 }
