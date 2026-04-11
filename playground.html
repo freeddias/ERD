@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Playground SQL — ERD Builder</title>
+    <meta
+      name="description"
+      content="Teste queries SQL em um banco SQLite fictício gerado a partir do diagrama ERD."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="playground-root">
+      <header class="playground-header">
+        <div class="playground-header-main">
+          <h1>Play SQL</h1>
+        </div>
+        <div class="playground-header-tools">
+          <span id="sandbox-db-badge" class="sandbox-badge">Sem banco de dados</span>
+        </div>
+      </header>
+
+      <main class="sandbox-wrap playground-console">
+        <div class="playground-action-row">
+          <button id="sandbox-new-empty" class="btn btn-primary" type="button">
+            Novo Banco
+          </button>
+          <button id="sandbox-build-db" class="btn" type="button">Montar banco a partir do diagrama</button>
+          <button id="sandbox-clear-db" class="btn" type="button">Descartar banco em memória</button>
+        </div>
+        <div class="sandbox-body">
+          <label class="sandbox-label" for="sandbox-sql-input">SQL</label>
+          <textarea
+            id="sandbox-sql-input"
+            class="sandbox-sql-input"
+            spellcheck="false"
+            placeholder="-- Ex.: criar schema e consultar&#10;CREATE TABLE demo (id INTEGER PRIMARY KEY, nome TEXT);&#10;INSERT INTO demo (nome) VALUES ('teste');&#10;SELECT * FROM demo;"
+          ></textarea>
+          <div class="sandbox-actions">
+            <button id="sandbox-run" class="btn btn-primary btn-sandbox-run" type="button">
+              Executar SQL
+            </button>
+            <button id="sandbox-clear-output" class="btn btn-small" type="button">
+              Limpar saída
+            </button>
+          </div>
+          <p class="sandbox-label" id="sandbox-result-heading">Resultado</p>
+          <p id="status" class="hint playground-status-line" hidden></p>
+          <div
+            id="sandbox-output-wrap"
+            class="sandbox-output-wrap"
+            aria-labelledby="sandbox-result-heading"
+            aria-live="polite"
+            role="region"
+          >
+            <p class="sandbox-msg sandbox-msg--muted">
+              Digite SQL e clique em Executar. Abaixo aparecerá
+              o resultado de cada comando ou o motivo da falha.
+            </p>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js"></script>
+    <script src="sqlite-ddl.js"></script>
+    <script src="playground.js"></script>
+  </body>
+</html>

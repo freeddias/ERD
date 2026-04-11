@@ -1,8 +1,11 @@
 const STORAGE_KEY = "erd-builder-state";
 
+const DEFAULT_CANVAS = { width: 2400, height: 1600 };
+
 const state = {
   entities: [],
-  relations: []
+  relations: [],
+  canvas: { ...DEFAULT_CANVAS }
 };
 
 const workspace = document.getElementById("workspace");
@@ -123,7 +126,8 @@ document.getElementById("export-json").addEventListener("click", async () => {
     {
       entities: state.entities,
       relations: state.relations,
-      theme: getCurrentTheme()
+      theme: getCurrentTheme(),
+      canvas: state.canvas
     },
     null,
     2
@@ -146,6 +150,45 @@ document.getElementById("export-sql").addEventListener("click", async () => {
   } catch {
     setStatus("Não foi possível copiar automaticamente. Use Ctrl+C manualmente.");
     window.prompt("Copie o SQL:", sql);
+  }
+});
+
+document.getElementById("import-json").addEventListener("click", async () => {
+  if (state.entities.length > 0 || state.relations.length > 0) {
+    if (!confirm("Substituir o diagrama atual pelo JSON colado?")) {
+      return;
+    }
+  }
+
+  let text = "";
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    // Permissão negada ou área de transferência indisponível.
+  }
+
+  if (!text || !text.trim()) {
+    text = window.prompt("Cole o JSON e confirme:", "");
+    if (text === null) {
+      return;
+    }
+  }
+
+  text = text.trim();
+  if (!text) {
+    setStatus("Nenhum JSON para importar.");
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    if (!applyPayloadFromObject(parsed)) {
+      setStatus("JSON inválido ou formato incompatível.");
+      return;
+    }
+    setStatus("Diagrama importado a partir do JSON colado.");
+  } catch {
+    setStatus("JSON inválido. Verifique se copiou o conteúdo completo.");
   }
 });
 
@@ -205,8 +248,24 @@ function createEntity(initial = {}) {
       Array.isArray(initial.fields) && initial.fields.length > 0
         ? initial.fields.map(normalizeField)
         : [
-            { id: uid(), name: "id", type: "INT", pk: true },
-            { id: uid(), name: "created_at", type: "DATE", pk: false }
+            {
+              id: uid(),
+              name: "id",
+              type: "INT",
+              pk: true,
+              notNull: true,
+              unique: false,
+              autoIncrement: true
+            },
+            {
+              id: uid(),
+              name: "created_at",
+              type: "DATE",
+              pk: false,
+              notNull: false,
+              unique: false,
+              autoIncrement: false
+            }
           ]
   };
 
@@ -242,7 +301,15 @@ function renderEntity(entity) {
   });
 
   addFieldBtn.addEventListener("click", () => {
-    const field = { id: uid(), name: "campo", type: "VARCHAR", pk: false };
+    const field = {
+      id: uid(),
+      name: "campo",
+      type: "VARCHAR",
+      pk: false,
+      notNull: false,
+      unique: false,
+      autoIncrement: false
+    };
     entity.fields.push(field);
     renderField(entity, fieldsWrap, field);
     adjustEntityCardWidth(entity.id);
@@ -311,21 +378,43 @@ function renderEntity(entity) {
   adjustEntityCardWidth(entity.id);
 }
 
+function syncFieldConstraintUi(field, pkInput, notNullInput, uniqueInput, aiInput, typeSelect) {
+  const isInt = typeSelect.value === "INT";
+  pkInput.checked = field.pk;
+  notNullInput.checked = field.pk || field.notNull;
+  notNullInput.disabled = field.pk;
+  if (field.pk) {
+    field.unique = false;
+  }
+  uniqueInput.checked = Boolean(field.unique && !field.pk);
+  uniqueInput.disabled = field.pk;
+  aiInput.disabled = !isInt;
+  if (!isInt) {
+    aiInput.checked = false;
+    field.autoIncrement = false;
+  } else {
+    aiInput.checked = Boolean(field.autoIncrement);
+  }
+}
+
 function renderField(entity, wrap, field) {
   const fragment = fieldTemplate.content.cloneNode(true);
   const row = fragment.querySelector(".field-row");
   const nameInput = fragment.querySelector(".field-name");
   const typeSelect = fragment.querySelector(".field-type");
   const pkInput = fragment.querySelector(".field-pk");
+  const notNullInput = fragment.querySelector(".field-not-null");
+  const uniqueInput = fragment.querySelector(".field-unique");
+  const aiInput = fragment.querySelector(".field-auto-inc");
   const removeFieldFkBtn = fragment.querySelector(".remove-field-fk");
   const removeBtn = fragment.querySelector(".remove-field");
 
   row.dataset.fieldId = field.id;
   nameInput.value = field.name;
   typeSelect.value = field.type;
-  pkInput.checked = field.pk;
   autoSizeTextControl(nameInput, 10, 70);
   autoSizeSelectControl(typeSelect, 8, 22);
+  syncFieldConstraintUi(field, pkInput, notNullInput, uniqueInput, aiInput, typeSelect);
 
   nameInput.addEventListener("input", () => {
     field.name = nameInput.value.trim() || "campo";
@@ -338,7 +427,11 @@ function renderField(entity, wrap, field) {
 
   typeSelect.addEventListener("change", () => {
     field.type = typeSelect.value;
+    if (typeSelect.value !== "INT") {
+      field.autoIncrement = false;
+    }
     autoSizeSelectControl(typeSelect, 8, 22);
+    syncFieldConstraintUi(field, pkInput, notNullInput, uniqueInput, aiInput, typeSelect);
     adjustEntityCardWidth(entity.id);
     updateFieldSelectors();
     drawRelations();
@@ -347,7 +440,34 @@ function renderField(entity, wrap, field) {
 
   pkInput.addEventListener("change", () => {
     field.pk = pkInput.checked;
+    if (field.pk) {
+      field.notNull = true;
+      field.unique = false;
+    }
+    syncFieldConstraintUi(field, pkInput, notNullInput, uniqueInput, aiInput, typeSelect);
     updateFieldSelectors();
+    drawRelations();
+    persistAppState();
+  });
+
+  notNullInput.addEventListener("change", () => {
+    if (field.pk) {
+      return;
+    }
+    field.notNull = notNullInput.checked;
+    persistAppState();
+  });
+
+  uniqueInput.addEventListener("change", () => {
+    if (field.pk) {
+      return;
+    }
+    field.unique = uniqueInput.checked;
+    persistAppState();
+  });
+
+  aiInput.addEventListener("change", () => {
+    field.autoIncrement = aiInput.checked;
     persistAppState();
   });
 
@@ -429,8 +549,21 @@ function createFieldOptions(entity) {
 
   return entity.fields
     .map((field) => {
-      const flag = field.pk ? " [PK]" : "";
-      return `<option value="${field.id}">${escapeHtml(field.name)} (${field.type})${flag}</option>`;
+      const tags = [];
+      if (field.pk) {
+        tags.push("PK");
+      }
+      if (!field.pk && field.notNull) {
+        tags.push("NN");
+      }
+      if (field.unique && !field.pk) {
+        tags.push("UQ");
+      }
+      if (field.autoIncrement) {
+        tags.push("AI");
+      }
+      const tagStr = tags.length > 0 ? ` [${tags.join(" ")}]` : "";
+      return `<option value="${field.id}">${escapeHtml(field.name)} (${field.type})${tagStr}</option>`;
     })
     .join("");
 }
@@ -438,8 +571,10 @@ function createFieldOptions(entity) {
 function drawRelations() {
   syncRelations();
 
-  const layerWidth = Math.max(workspace.scrollWidth, workspace.clientWidth, 1200);
-  const layerHeight = Math.max(workspace.scrollHeight, workspace.clientHeight, 800);
+  const cw = state.canvas?.width ?? DEFAULT_CANVAS.width;
+  const ch = state.canvas?.height ?? DEFAULT_CANVAS.height;
+  const layerWidth = Math.max(workspace.scrollWidth, workspace.clientWidth, cw, 1200);
+  const layerHeight = Math.max(workspace.scrollHeight, workspace.clientHeight, ch, 800);
   relationsLayer.setAttribute("width", String(layerWidth));
   relationsLayer.setAttribute("height", String(layerHeight));
 
@@ -640,25 +775,46 @@ function initTheme(preferredTheme) {
   applyTheme(preferredTheme || fallback);
 }
 
+function normalizeCanvas(parsed) {
+  const c = parsed?.canvas;
+  if (!c || typeof c !== "object") {
+    return { ...DEFAULT_CANVAS };
+  }
+  const width = Number.isFinite(c.width) ? clamp(c.width, 1200, 8000) : DEFAULT_CANVAS.width;
+  const height = Number.isFinite(c.height) ? clamp(c.height, 800, 8000) : DEFAULT_CANVAS.height;
+  return { width, height };
+}
+
+function applyWorkspaceCanvasSize() {
+  const w = clamp(state.canvas.width, 1200, 8000);
+  const h = clamp(state.canvas.height, 800, 8000);
+  state.canvas.width = w;
+  state.canvas.height = h;
+  workspace.style.minWidth = `${w}px`;
+  workspace.style.minHeight = `${h}px`;
+  const label = document.getElementById("canvas-size-label");
+  if (label) {
+    label.textContent = `${w} × ${h}`;
+  }
+}
+
 function persistAppState() {
   const payload = {
     entities: state.entities,
     relations: state.relations,
-    theme: getCurrentTheme()
+    theme: getCurrentTheme(),
+    canvas: state.canvas
   };
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
-function restoreAppState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
+function applyPayloadFromObject(parsed) {
+  if (!parsed || typeof parsed !== "object") {
     return false;
   }
 
   try {
-    const parsed = JSON.parse(raw);
-
     state.entities = Array.isArray(parsed.entities)
       ? parsed.entities.map(normalizeEntity)
       : [];
@@ -666,6 +822,9 @@ function restoreAppState() {
     state.relations = Array.isArray(parsed.relations)
       ? parsed.relations.map(normalizeRelation)
       : [];
+
+    state.canvas = normalizeCanvas(parsed);
+    applyWorkspaceCanvasSize();
 
     initTheme(typeof parsed.theme === "string" ? parsed.theme : undefined);
 
@@ -679,7 +838,22 @@ function restoreAppState() {
     updateEntitySelectors();
     drawRelations();
     resizeAllEntityCards();
+    persistAppState();
     return true;
+  } catch {
+    return false;
+  }
+}
+
+function restoreAppState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return applyPayloadFromObject(parsed);
   } catch {
     return false;
   }
@@ -698,18 +872,41 @@ function normalizeEntity(entity) {
       Array.isArray(entity.fields) && entity.fields.length > 0
         ? entity.fields.map(normalizeField)
         : [
-            { id: uid(), name: "id", type: "INT", pk: true },
-            { id: uid(), name: "created_at", type: "DATE", pk: false }
+            {
+              id: uid(),
+              name: "id",
+              type: "INT",
+              pk: true,
+              notNull: true,
+              unique: false,
+              autoIncrement: true
+            },
+            {
+              id: uid(),
+              name: "created_at",
+              type: "DATE",
+              pk: false,
+              notNull: false,
+              unique: false,
+              autoIncrement: false
+            }
           ]
   };
 }
 
 function normalizeField(field) {
+  const pk = Boolean(field.pk);
+  const typ =
+    typeof field.type === "string" && field.type.trim() ? field.type.trim() : "VARCHAR";
+  const isInt = typ === "INT";
   return {
     id: typeof field.id === "string" && field.id ? field.id : uid(),
     name: typeof field.name === "string" && field.name.trim() ? field.name.trim() : "campo",
-    type: typeof field.type === "string" && field.type.trim() ? field.type.trim() : "VARCHAR",
-    pk: Boolean(field.pk)
+    type: typ,
+    pk,
+    notNull: pk ? true : Boolean(field.notNull),
+    unique: pk ? false : Boolean(field.unique),
+    autoIncrement: isInt && Boolean(field.autoIncrement)
   };
 }
 
@@ -805,14 +1002,36 @@ function generateSqlDdl() {
     for (const field of fields) {
       const col = sqlQuoteIdent(field.name);
       const typ = mapSqlFieldType(field.type);
-      let def = `  ${col} ${typ}`;
+      const isInt = typ.startsWith("INT");
+      const parts = [];
 
       if (pkFields.length === 1 && field.pk) {
-        def += " NOT NULL PRIMARY KEY";
+        parts.push("NOT NULL");
+        if (field.autoIncrement && isInt) {
+          parts.push("AUTO_INCREMENT");
+        }
+        parts.push("PRIMARY KEY");
       } else if (field.pk) {
-        def += " NOT NULL";
+        parts.push("NOT NULL");
+        if (field.autoIncrement && isInt) {
+          parts.push("AUTO_INCREMENT");
+        }
+      } else {
+        if (field.notNull) {
+          parts.push("NOT NULL");
+        }
+        if (field.autoIncrement && isInt) {
+          parts.push("AUTO_INCREMENT");
+        }
+        if (field.unique) {
+          parts.push("UNIQUE");
+        }
       }
 
+      let def = `  ${col} ${typ}`;
+      if (parts.length > 0) {
+        def += ` ${parts.join(" ")}`;
+      }
       colDefs.push(def);
     }
 
@@ -1032,6 +1251,24 @@ function formatExportQuery(sql, language) {
 
   return sql;
 }
+
+applyWorkspaceCanvasSize();
+
+document.getElementById("expand-canvas-w").addEventListener("click", () => {
+  state.canvas.width = clamp(state.canvas.width + 400, 1200, 8000);
+  applyWorkspaceCanvasSize();
+  drawRelations();
+  persistAppState();
+  setStatus("Área do diagrama ampliada na largura.");
+});
+
+document.getElementById("expand-canvas-h").addEventListener("click", () => {
+  state.canvas.height = clamp(state.canvas.height + 400, 800, 8000);
+  applyWorkspaceCanvasSize();
+  drawRelations();
+  persistAppState();
+  setStatus("Área do diagrama ampliada na altura.");
+});
 
 const restored = restoreAppState();
 if (!restored) {

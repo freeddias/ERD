@@ -23,10 +23,18 @@
           </button>
         </div>
 
+        <nav class="nav-pages" aria-label="Navegação">
+          <a href="playground.html" class="btn btn-small nav-page-link">Playground SQL →</a>
+        </nav>
+
         <div class="screen-switch">
           <button id="open-erd-screen" class="btn btn-small active" type="button">Tela ERD</button>
           <button id="open-query-screen" class="btn btn-small" type="button">Tela Query</button>
         </div>
+
+        <p id="status" class="hint status-global">
+          Arraste as entidades para organizar o diagrama.
+        </p>
 
         <div id="erd-controls">
           <button id="add-entity" class="btn btn-primary">+ Nova Entidade</button>
@@ -72,6 +80,7 @@
             <h2>Exportar</h2>
             <button id="export-json" class="btn">Copiar JSON</button>
             <button id="export-sql" class="btn" type="button">Copiar SQL</button>
+            <button id="import-json" class="btn" type="button">Colar JSON</button>
           </div>
         </div>
 
@@ -125,26 +134,20 @@
 
       <main id="erd-screen" class="workspace-wrap">
         <div class="workspace-toolbar">
-          <span id="status">Arraste as entidades para organizar o diagrama.</span>
+          <span class="toolbar-spacer" aria-hidden="true"></span>
+          <div class="canvas-controls" role="group" aria-label="Tamanho da área do diagrama">
+            <span class="hint canvas-size-hint"
+              >Área: <span id="canvas-size-label">2400 × 1600</span> px</span>
+            <button type="button" id="expand-canvas-w" class="btn btn-small">+ Largura</button>
+            <button type="button" id="expand-canvas-h" class="btn btn-small">+ Altura</button>
+          </div>
         </div>
         <section id="workspace" class="workspace" aria-label="Área do diagrama">
           <svg id="relations-layer" class="relations-layer"></svg>
         </section>
       </main>
 
-      <main id="query-screen" class="query-wrap" hidden>
-        <!-- <div class="query-toolbar">
-          <span>Use o menu esquerdo para selecionar opções e gerar a query.</span>
-        </div> -->
-        <!-- <section class="query-result-area" aria-label="Área de geração de query">
-          <article class="panel query-result-panel">
-            <h2>Gerador de Query</h2>
-            <p class="hint">
-              Todas as configurações e a saída estão no painel esquerdo.
-            </p>
-          </article>
-        </section> -->
-      </main>
+      <main id="query-screen" class="query-wrap" hidden></main>
     </div>
 
     <template id="entity-template">
@@ -162,24 +165,29 @@
 
     <template id="field-template">
       <div class="field-row">
-        <input class="field-name" value="novo_campo" />
-        <select class="field-type">
-          <option>INT</option>
-          <option>VARCHAR</option>
-          <option>TEXT</option>
-          <option>DATE</option>
-          <option>DATETIME</option>
-          <option>BOOLEAN</option>
-          <option>DECIMAL</option>
-        </select>
+        <div class="field-row-top">
+          <input class="field-name" value="novo_campo" />
+          <select class="field-type">
+            <option>INT</option>
+            <option>VARCHAR</option>
+            <option>TEXT</option>
+            <option>DATE</option>
+            <option>DATETIME</option>
+            <option>BOOLEAN</option>
+            <option>DECIMAL</option>
+          </select>
+          <button class="icon-btn remove-field-fk" title="Remover FK do campo" hidden>
+            fk
+          </button>
+          <button class="icon-btn remove-field" title="Remover campo">x</button>
+        </div>
         <div class="field-meta">
           <label class="flag"><input type="checkbox" class="field-pk" /> PK</label>
+          <label class="flag"><input type="checkbox" class="field-not-null" /> NN</label>
+          <label class="flag"><input type="checkbox" class="field-unique" /> UQ</label>
+          <label class="flag"><input type="checkbox" class="field-auto-inc" /> AI</label>
           <span class="fk-chip" hidden>FK</span>
         </div>
-        <button class="icon-btn remove-field-fk" title="Remover FK do campo" hidden>
-          fk
-        </button>
-        <button class="icon-btn remove-field" title="Remover campo">x</button>
       </div>
     </template>
 
